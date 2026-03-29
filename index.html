@@ -136,7 +136,8 @@ button,input,select,textarea{font-family:inherit;font-size:inherit;}
 
 /* PRESENÇA */
 .pres-hdr{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px;}
-.pres-selects{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px;}
+.pres-selects{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:12px;}
+@media(min-width:480px){.pres-selects{grid-template-columns:1fr 1fr;}}
 .pres-selects .field{margin:0;}
 .counters{display:flex;gap:8px;}
 .counter{flex:1;background:var(--surface2);border-radius:var(--r-sm);padding:9px 6px;text-align:center;}
@@ -314,7 +315,7 @@ tbody td{padding:10px 13px;font-size:.82rem;}
   <div class="div"></div>
   <div style="display:flex;gap:8px;"><button class="btn btn-p btn-full" id="btn-conf-pag"><i class="fas fa-check"></i> Confirmar</button><button class="btn btn-gh" data-close="mo-pag">Cancelar</button></div>
 </div></div>
-<div class="overlay" id="mo-del"><div class="modal" style="max-width:320px;text-align:center;"><div class="m-handle"></div><div style="font-size:2rem;margin-bottom:10px;">⚠️</div><h3 style="margin-bottom:8px;">Excluir Aluno?</h3><p style="font-size:.82rem;color:var(--muted);margin-bottom:20px;">Essa ação não pode ser desfeita.</p><div style="display:flex;gap:8px;justify-content:center;"><button class="btn btn-r" id="btn-conf-del">Sim, excluir</button><button class="btn btn-gh" data-close="mo-del">Cancelar</button></div></div></div>
+<div class="overlay" id="mo-del"><div class="modal" style="max-width:320px;text-align:center;"><div class="m-handle"></div><div style="font-size:2rem;margin-bottom:10px;" id="conf-icon">⚠️</div><h3 style="margin-bottom:8px;" id="conf-titulo">Confirmar</h3><p style="font-size:.82rem;color:var(--muted);margin-bottom:20px;" id="conf-msg">Essa ação não pode ser desfeita.</p><div style="display:flex;gap:8px;justify-content:center;"><button class="btn btn-r" id="btn-conf-del" id="btn-conf-action">Confirmar</button><button class="btn btn-gh" data-close="mo-del">Cancelar</button></div></div></div>
 
 <div class="overlay" id="mo-visitante"><div class="modal" style="max-width:380px;"><div class="m-handle"></div><div class="m-hd"><h3>➕ Adicionar Visitante</h3><button class="m-close" data-close="mo-visitante"><i class="fas fa-times"></i></button></div>
   <p style="font-size:.8rem;color:var(--muted);margin-bottom:14px;">O visitante será marcado como <strong>presente</strong> nesta chamada, mas não entra no sistema de alunos.</p>
@@ -509,6 +510,20 @@ let _pres={},_presState={},_presModIdx=null;
 let _fA='todos',_fP='todos',_plano='mensal';
 let _editId=null,_delId=null,_pagAlunoId=null,_pagIdx=null,_unsubAlunos=null;
 let _perfil='admin'; // 'admin' ou 'secretaria'
+
+let _confirmCallback = null;
+function showConfirm(opts){
+  // opts: { icon, titulo, msg, btnLabel, btnClass, onConfirm }
+  document.getElementById('conf-icon').textContent = opts.icon || '⚠️';
+  document.getElementById('conf-titulo').textContent = opts.titulo || 'Confirmar';
+  document.getElementById('conf-msg').textContent = opts.msg || 'Deseja continuar?';
+  const btn = document.getElementById('btn-conf-del');
+  btn.textContent = opts.btnLabel || 'Confirmar';
+  btn.className = 'btn ' + (opts.btnClass || 'btn-r');
+  _confirmCallback = opts.onConfirm || null;
+  abre('mo-del');
+}
+
 let _visitantes={}; // {presModIdx: [{id, nome, igreja, tel}]}
 
 function fbSetStatus(state,msg){
@@ -577,8 +592,24 @@ document.getElementById('btn-salvar-aluno').addEventListener('click',async funct
   this.disabled=false;this.innerHTML='<i class="fas fa-check-circle"></i> CONCLUIR MATRÍCULA';
 });
 
-function prepDel(id){_delId=id;abre('mo-del');}
-document.getElementById('btn-conf-del').addEventListener('click',async()=>{try{await fbDel(_delId);fecha('mo-del');fecha('mo-ficha');toast('Aluno removido.','inf');}catch(e){toast('Erro: '+e.message,'err');}});
+function prepDel(id){
+  _delId=id;
+  showConfirm({
+    icon:'🗑️',
+    titulo:'Excluir Aluno?',
+    msg:'Essa ação não pode ser desfeita. Todos os dados do aluno serão removidos.',
+    btnLabel:'Sim, excluir',
+    btnClass:'btn-r',
+    onConfirm: async()=>{
+      try{await fbDel(_delId);fecha('mo-ficha');toast('Aluno removido.','inf');}
+      catch(e){toast('Erro: '+e.message,'err');}
+    }
+  });
+}
+document.getElementById('btn-conf-del').addEventListener('click',async()=>{
+  fecha('mo-del');
+  if(_confirmCallback){ await _confirmCallback(); _confirmCallback=null; }
+});
 
 document.getElementById('busca-a').addEventListener('input',renderAlunos);
 document.getElementById('busca-p').addEventListener('input',renderPag);
@@ -802,7 +833,16 @@ document.getElementById('btn-exp-csv').addEventListener('click',()=>{const rows=
 document.getElementById('btn-exp-txt').addEventListener('click',()=>{const txt=_alunos.map((a,i)=>(i+1)+'. '+a.nome+'\n   Tel: '+a.tel+' | Igreja: '+(a.igreja||'—')+'\n   Status: '+calcStatus(a)+' | Recebido: R$'+calcRec(a).toFixed(2)).join('\n\n');const b=new Blob(['ESCOLA ANTIOQUIA\n'+new Date().toLocaleString('pt-BR')+'\n'+'—'.repeat(50)+'\n\n'+txt],{type:'text/plain;charset=utf-8'});const l=document.createElement('a');l.href=URL.createObjectURL(b);l.download='alunos_antioquia.txt';l.click();fecha('mo-exp');});
 
 document.getElementById('tog-light').addEventListener('change',function(){document.documentElement.toggleAttribute('data-light',this.checked);});
-document.getElementById('btn-logout').addEventListener('click',()=>{if(confirm('Deseja sair?'))location.reload();});
+document.getElementById('btn-logout').addEventListener('click',()=>{
+  showConfirm({
+    icon:'👋',
+    titulo:'Sair do sistema?',
+    msg:'Você será redirecionado para a tela de login.',
+    btnLabel:'Sim, sair',
+    btnClass:'btn-gh',
+    onConfirm: ()=>location.reload()
+  });
+});
 
 
 // VISITANTES
@@ -829,14 +869,22 @@ document.getElementById('btn-conf-visitante').addEventListener('click',()=>{
 
 
 async function delChamada(chave, chamadaId){
-  if(!confirm('Excluir esta chamada?')) return;
-  if(!_pres[chave]) return;
-  _pres[chave] = _pres[chave].filter(ch => ch.id !== chamadaId);
-  try {
-    await fbSavePres(chave, _pres[chave]);
-    renderPresHist();
-    toast('Chamada removida.', 'inf');
-  } catch(e) { toast('Erro: '+e.message, 'err'); }
+  showConfirm({
+    icon:'🗑️',
+    titulo:'Excluir Chamada?',
+    msg:'O registro desta chamada será removido permanentemente.',
+    btnLabel:'Sim, excluir',
+    btnClass:'btn-r',
+    onConfirm: async()=>{
+      if(!_pres[chave]) return;
+      _pres[chave] = _pres[chave].filter(ch => ch.id !== chamadaId);
+      try{
+        await fbSavePres(chave, _pres[chave]);
+        renderPresHist();
+        toast('Chamada removida.','inf');
+      } catch(e){ toast('Erro: '+e.message,'err'); }
+    }
+  });
 }
 
 function renderAll(){renderAlunos();renderPag();renderMais();}
